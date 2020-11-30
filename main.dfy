@@ -1,3 +1,6 @@
+// binary tree reference:
+// https://github.com/dafny-lang/dafny/blob/master/Test/dafny1/BinaryTree.dfy
+
 type T = int // example 
 class {:autocontracts} BSTNode {
     // Concrete implementation variables.
@@ -11,7 +14,6 @@ class {:autocontracts} BSTNode {
     ghost var Repr: set<object>
 
     constructor(x: T) 
-        ensures Valid()
         ensures fresh(Repr - {this})
         ensures elems == {x}
     {
@@ -24,7 +26,6 @@ class {:autocontracts} BSTNode {
 
     // Class invariant with the integrity constraints for the above variables
     predicate Valid() 
-        reads this, Repr
     {   
         this in Repr &&
 
@@ -53,6 +54,78 @@ class {:autocontracts} BSTNode {
             left.Repr !! right.Repr &&
             elems == left.elems + {value} + right.elems)
     }
+
+    function method contains(x: T) : bool 
+        ensures contains(x) <==> x in elems
+        decreases Repr
+    {
+        if x == value then 
+            true
+        else if left != null && x < value then 
+            left.contains(x)
+        else if right != null && x > value then 
+            right.contains(x)
+        else 
+            false
+    }
+
+    method remove(x: T) returns (node: BSTNode?)
+        modifies Repr
+        ensures fresh(Repr - old(Repr))
+        ensures node != null ==> node.Valid()
+        ensures node == null ==> old(elems) <= {x}
+        ensures node != null ==> node.Repr <= Repr && node.elems == old(elems) - {x}
+        decreases Repr
+    {
+        node := this;
+        if left != null && x < value {
+            var t := left.remove(x);
+            left := t;
+            elems := elems - {x};
+            if left != null { Repr := Repr + left.Repr; }
+        } else if right != null && value < x {
+            var t := right.remove(x);
+            right := t;
+            elems := elems - {x};
+            if right != null { Repr := Repr + right.Repr; }
+        } else if x == value {
+            if left == null && right == null {
+                node := null;
+            } else if left == null {
+                node := right;
+            } else if right == null {
+                node := left;
+            } else {
+                // rotate
+                var min, r := right.removeMin();
+                value := min;  right := r;
+                elems := elems - {x};
+                if right != null { Repr := Repr + right.Repr; }
+            }
+        }
+    }
+
+    method removeMin() returns (min: T, node: BSTNode?)
+        modifies Repr
+        ensures fresh(Repr - old(Repr))
+        ensures node != null ==> node.Valid()
+        ensures node == null ==> old(elems) == {min}
+        ensures node != null ==> node.Repr <= Repr && node.elems == old(elems) - {min}
+        ensures min in old(elems) && (forall x :: x in old(elems) ==> min <= x)
+        decreases Repr
+    {
+        if left == null {
+            min := value;
+            node := right;
+        } else {
+            var t;
+            min, t := left.removeMin();
+            left := t;
+            node := this;
+            elems := elems - {min};
+            if left != null { Repr := Repr + left.Repr; }
+        }
+    }
 }
 
 // ordered and no duplicates
@@ -66,7 +139,7 @@ class {:autocontracts} TreeSet {
     ghost var Repr: set<object>
 
     constructor() 
-        ensures elems == {} && Valid()
+        ensures elems == {}
         ensures fresh(Repr - {this})
     {
         root := null;
@@ -75,7 +148,6 @@ class {:autocontracts} TreeSet {
     }
 
     predicate Valid()
-        reads this, Repr
     {
         this in Repr &&
         (root == null ==> elems == {}) &&
@@ -86,10 +158,15 @@ class {:autocontracts} TreeSet {
                           root.Valid())
     }
 
+    function method contains(x: T): bool
+        ensures contains(x) <==> x in elems
+    {
+        root != null && root.contains(x)
+    }
+
+
     method insert(x: T) 
-        requires Valid()
         modifies Repr
-        ensures Valid()
         ensures fresh(Repr - old(Repr))
         ensures elems == old(elems) + {x}
     {
@@ -129,22 +206,42 @@ class {:autocontracts} TreeSet {
         }
     }
 
-    /*method delete(x: T) 
+    method remove(x: T)
+        modifies Repr
+        ensures fresh(Repr - old(Repr))
+        ensures elems == old(elems) - {x}
     {
-        // TODO
-    }
-
-    method contains(x: T) returns (res: bool)
-    {   
-        var result := false;
         if root != null {
-            result := root.contains(x);
+            var newRoot := root.remove(x);
+            root := newRoot;
+            elems := if root == null then {} else root.elems;
+            Repr := if root == null then {this} else root.Repr + {this};
         }
-        return result;
     }
 
     method asSeq() returns (res: seq<T>)
     {
 
-    }*/
+    }
+}
+
+class Main {
+  method Client0(x: T)
+  {
+    var s := new TreeSet();
+
+    s.insert(12);
+    s.insert(24);
+    var present := s.contains(x);
+    assert present <==> x == 12 || x == 24;
+  }
+
+  method Client1(s: TreeSet, x: T)
+    requires s.Valid()
+    modifies s.Repr
+  {
+    s.insert(x);
+    s.insert(24);
+    assert old(s.elems) - {x,24} == s.elems - {x,24};
+  }
 }
