@@ -2,6 +2,21 @@
 // https://github.com/dafny-lang/dafny/blob/master/Test/dafny1/BinaryTree.dfy
 
 type T = int // example 
+
+predicate isSorted(s: seq<T>) {
+    forall i, j :: 0 <= i < j < |s| ==> s[i] <= s[j]
+}
+
+predicate noDuplicates(s: seq<T>) {
+    forall i, j :: 0 <= i < j < |s| ==> s[i] != s[j]
+}
+
+predicate sameContent(s1: seq<T>, s2: set<T>) {
+    forall i :: 0 <= i < |s1| ==> s1[i] in s2 &&
+    forall i :: i in s2 ==> (exists j :: 0 <= j < |s1| && s1[j] == i) &&
+    |s1| == |s2|
+}
+
 class {:autocontracts} BSTNode {
     // Concrete implementation variables.
     var value: T 
@@ -42,17 +57,25 @@ class {:autocontracts} BSTNode {
             (forall v :: v in right.elems ==> value < v)) &&
 
         (left == null && right == null ==>
-            elems == {value}) &&
+            elems == {value} && 
+            |elems| == 1
+        ) &&
 
         (left != null && right == null ==>
-            elems == left.elems + {value}) &&
+            elems == left.elems + {value} &&
+            |elems| == |left.elems| + 1
+        ) &&
 
         (left == null && right != null ==>
-            elems == {value} + right.elems) &&
+            elems == {value} + right.elems &&
+            |elems| == |right.elems| + 1
+        ) &&
 
         (left != null && right != null ==>
             left.Repr !! right.Repr &&
-            elems == left.elems + {value} + right.elems)
+            elems == left.elems + {value} + right.elems &&
+            |elems| == |right.elems| + |left.elems| + 1
+        )
     }
 
     function method contains(x: T) : bool 
@@ -83,11 +106,13 @@ class {:autocontracts} BSTNode {
             left := t;
             elems := elems - {x};
             if left != null { Repr := Repr + left.Repr; }
+
         } else if right != null && value < x {
             var t := right.remove(x);
             right := t;
             elems := elems - {x};
             if right != null { Repr := Repr + right.Repr; }
+
         } else if x == value {
             if left == null && right == null {
                 node := null;
@@ -98,9 +123,12 @@ class {:autocontracts} BSTNode {
             } else {
                 // rotate
                 var min, r := right.removeMin();
-                value := min;  right := r;
+                value := min;  
+                right := r;
                 elems := elems - {x};
-                if right != null { Repr := Repr + right.Repr; }
+                if right != null {
+                    Repr := Repr + right.Repr; 
+                }
             }
         }
     }
@@ -169,6 +197,7 @@ class {:autocontracts} TreeSet {
         modifies Repr
         ensures fresh(Repr - old(Repr))
         ensures elems == old(elems) + {x}
+        ensures x in old(elems) ==> elems == old(elems)
     {
         var newRoot := insertHelper(x, root);
         root := newRoot;
@@ -191,12 +220,10 @@ class {:autocontracts} TreeSet {
             m := n;
         } else {
             if x < n.value {
-                assert n.right == null || n.right.Valid();
                 var t := insertHelper(x, n.left);
                 n.left := t;
                 n.Repr := n.Repr + n.left.Repr;
             } else {
-                assert n.left == null || n.left.Valid();
                 var t := insertHelper(x, n.right);
                 n.right := t;
                 n.Repr := n.Repr + n.right.Repr;
@@ -220,8 +247,40 @@ class {:autocontracts} TreeSet {
     }
 
     method asSeq() returns (res: seq<T>)
+        ensures isSorted(res)
     {
+        res := asSeqHelper(root);
+    }
 
+    static method asSeqHelper(node: BSTNode?) returns (res: seq<T>) 
+        requires node == null || node.Valid()
+        decreases if node == null then {} else node.Repr
+        ensures node == null <==> res == []
+        ensures node != null ==> 
+            node.Valid() &&
+            node.elems == old(node.elems) && 
+            node.Repr == old(node.Repr) &&
+            node.value == old(node.value) &&
+            sameContent(res, node.elems)
+        ensures noDuplicates(res)
+        ensures isSorted(res)
+    {
+        if node == null {
+            res := [];
+        }
+        else {
+            var leftSeq := asSeqHelper(node.left);
+            var rightSeq := asSeqHelper(node.right);
+
+            assert forall i :: i in leftSeq ==> i < node.value;
+            assert forall i :: i in rightSeq ==> i > node.value;
+
+            assert node.left != null ==> sameContent(leftSeq, node.left.elems);
+            assert node.right != null ==> sameContent(rightSeq, node.right.elems);
+
+            res := leftSeq + [node.value] + rightSeq;
+            assert isSorted(res);
+        }
     }
 }
 
@@ -234,6 +293,9 @@ class Main {
     s.insert(24);
     var present := s.contains(x);
     assert present <==> x == 12 || x == 24;
+
+    var sequence := s.asSeq();
+    //assert sequence == [12, 24];
   }
 
   method Client1(s: TreeSet, x: T)
@@ -245,3 +307,6 @@ class Main {
     assert old(s.elems) - {x,24} == s.elems - {x,24};
   }
 }
+
+// test order and no duplicates
+// test algorithmic complexity
