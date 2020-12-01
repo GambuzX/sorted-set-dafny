@@ -288,20 +288,33 @@ method testTreeSet() {
     s.insert(1);
     s.insert(1);
 
-    assert s.contains(1) == true;
-    assert s.contains(12) == true;
-    assert s.contains(24) == true;
-    assert s.contains(2) == false;
-    assert s.contains(20) == false;
+    assert s.contains(1);
+    assert s.contains(12);
+    assert s.contains(24);
+    assert !s.contains(2);
+    assert !s.contains(20);
 
-    assert s.contains(64) == false;
+    assert !s.contains(64);
     s.insert(64);
-    assert s.contains(64) == true;
+    assert s.contains(64);
     ghost var s1 := s.asSeq();
     assert s1 == [1,12,24,64];
     s.delete(64);
-    assert s.contains(64) == false;
+    assert !s.contains(64);
 
     ghost var s2 := s.asSeq();
     assert s2 == [1,12,24];
 }
+
+/* TODO
+
+- comments
+- check conditions and simplify code
+
+- small report explaining the algorithm, decisions, and references used : https://docs.google.com/document/d/1yd8cTPNcB16oTAvn4s7nZjUev9nl9400ekhUMZt_0tk/edit
+
+
+
+
+
+*/
