@@ -74,7 +74,7 @@ class {:autocontracts} BSTNode {
         (left != null && right != null ==>
             left.Repr !! right.Repr &&
             elems == left.elems + {value} + right.elems &&
-            |elems| == |right.elems| + |left.elems| + 1
+            |elems| == |left.elems| + 1 + |right.elems|
         )
     }
 
@@ -272,14 +272,11 @@ class {:autocontracts} TreeSet {
             var leftSeq := asSeqHelper(node.left);
             var rightSeq := asSeqHelper(node.right);
 
-            assert forall i :: i in leftSeq ==> i < node.value;
-            assert forall i :: i in rightSeq ==> i > node.value;
-
             assert node.left != null ==> sameContent(leftSeq, node.left.elems);
             assert node.right != null ==> sameContent(rightSeq, node.right.elems);
 
             res := leftSeq + [node.value] + rightSeq;
-            assert isSorted(res);
+            assert sameContent(res, node.elems);
         }
     }
 }
@@ -295,7 +292,7 @@ class Main {
     assert present <==> x == 12 || x == 24;
 
     var sequence := s.asSeq();
-    //assert sequence == [12, 24];
+    assert sequence == [12, 24];
   }
 
   method Client1(s: TreeSet, x: T)
