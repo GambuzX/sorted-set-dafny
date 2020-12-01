@@ -12,9 +12,9 @@ predicate noDuplicates(s: seq<T>) {
 }
 
 predicate sameContent(s1: seq<T>, s2: set<T>) {
-    forall i :: 0 <= i < |s1| ==> s1[i] in s2 &&
-    forall i :: i in s2 ==> (exists j :: 0 <= j < |s1| && s1[j] == i) &&
-    |s1| == |s2|
+    (forall i :: 0 <= i < |s1| ==> s1[i] in s2) &&
+    (forall i :: i in s2 ==> i in s1) &&
+    (|s1| == |s2|)
 }
 
 class {:autocontracts} BSTNode {
@@ -43,6 +43,8 @@ class {:autocontracts} BSTNode {
     predicate Valid() 
     {   
         this in Repr &&
+
+        forall ele :: ele in elems ==> ele == value || (left != null && ele in left.elems) || (right != null && ele in right.elems) &&
 
         (left != null ==>
             left in Repr &&
@@ -73,6 +75,7 @@ class {:autocontracts} BSTNode {
 
         (left != null && right != null ==>
             left.Repr !! right.Repr &&
+            left.elems !! right.elems &&
             elems == left.elems + {value} + right.elems &&
             |elems| == |left.elems| + 1 + |right.elems|
         )
@@ -92,7 +95,7 @@ class {:autocontracts} BSTNode {
             false
     }
 
-    method remove(x: T) returns (node: BSTNode?)
+    method delete(x: T) returns (node: BSTNode?)
         modifies Repr
         ensures fresh(Repr - old(Repr))
         ensures node != null ==> node.Valid()
@@ -102,13 +105,13 @@ class {:autocontracts} BSTNode {
     {
         node := this;
         if left != null && x < value {
-            var t := left.remove(x);
+            var t := left.delete(x);
             left := t;
             elems := elems - {x};
             if left != null { Repr := Repr + left.Repr; }
 
         } else if right != null && value < x {
-            var t := right.remove(x);
+            var t := right.delete(x);
             right := t;
             elems := elems - {x};
             if right != null { Repr := Repr + right.Repr; }
@@ -122,7 +125,7 @@ class {:autocontracts} BSTNode {
                 node := left;
             } else {
                 // rotate
-                var min, r := right.removeMin();
+                var min, r := right.deleteMin();
                 value := min;  
                 right := r;
                 elems := elems - {x};
@@ -133,7 +136,7 @@ class {:autocontracts} BSTNode {
         }
     }
 
-    method removeMin() returns (min: T, node: BSTNode?)
+    method deleteMin() returns (min: T, node: BSTNode?)
         modifies Repr
         ensures fresh(Repr - old(Repr))
         ensures node != null ==> node.Valid()
@@ -147,7 +150,7 @@ class {:autocontracts} BSTNode {
             node := right;
         } else {
             var t;
-            min, t := left.removeMin();
+            min, t := left.deleteMin();
             left := t;
             node := this;
             elems := elems - {min};
@@ -233,13 +236,13 @@ class {:autocontracts} TreeSet {
         }
     }
 
-    method remove(x: T)
+    method delete(x: T)
         modifies Repr
         ensures fresh(Repr - old(Repr))
         ensures elems == old(elems) - {x}
     {
         if root != null {
-            var newRoot := root.remove(x);
+            var newRoot := root.delete(x);
             root := newRoot;
             elems := if root == null then {} else root.elems;
             Repr := if root == null then {this} else root.Repr + {this};
@@ -248,6 +251,8 @@ class {:autocontracts} TreeSet {
 
     method asSeq() returns (res: seq<T>)
         ensures isSorted(res)
+        ensures noDuplicates(res)
+        ensures sameContent(res, elems)
     {
         res := asSeqHelper(root);
     }
@@ -270,40 +275,33 @@ class {:autocontracts} TreeSet {
         }
         else {
             var leftSeq := asSeqHelper(node.left);
-            var rightSeq := asSeqHelper(node.right);
-
-            assert node.left != null ==> sameContent(leftSeq, node.left.elems);
-            assert node.right != null ==> sameContent(rightSeq, node.right.elems);
-
+            var rightSeq := asSeqHelper(node.right);   
             res := leftSeq + [node.value] + rightSeq;
-            assert sameContent(res, node.elems);
         }
     }
 }
-
-class Main {
-  method Client0(x: T)
-  {
+method testTreeSet() {
     var s := new TreeSet();
 
     s.insert(12);
     s.insert(24);
-    var present := s.contains(x);
-    assert present <==> x == 12 || x == 24;
+    s.insert(1);
+    s.insert(1);
 
-    var sequence := s.asSeq();
-    assert sequence == [12, 24];
-  }
+    assert s.contains(1) == true;
+    assert s.contains(12) == true;
+    assert s.contains(24) == true;
+    assert s.contains(2) == false;
+    assert s.contains(20) == false;
 
-  method Client1(s: TreeSet, x: T)
-    requires s.Valid()
-    modifies s.Repr
-  {
-    s.insert(x);
-    s.insert(24);
-    assert old(s.elems) - {x,24} == s.elems - {x,24};
-  }
+    assert s.contains(64) == false;
+    s.insert(64);
+    assert s.contains(64) == true;
+    ghost var s1 := s.asSeq();
+    assert s1 == [1,12,24,64];
+    s.delete(64);
+    assert s.contains(64) == false;
+
+    ghost var s2 := s.asSeq();
+    assert s2 == [1,12,24];
 }
-
-// test order and no duplicates
-// test algorithmic complexity
