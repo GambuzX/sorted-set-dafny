@@ -34,8 +34,8 @@ class {:autocontracts} BSTNode {
 
     // initialize node with given value and no children
     constructor(x: T) 
-        ensures fresh(Repr - {this})
         ensures elems == {x}
+        ensures fresh(Repr - {this})
     {
         value := x;
         left := null;
@@ -49,26 +49,22 @@ class {:autocontracts} BSTNode {
     {   
         /*
             Must make sure:
-                - Repr is valid: this node is in Repr, as well as the nodes of the subtree. this node is not in the subtree's Repr.
-                - left and right are always Valid
-                - all values in left subtree are smaller than 'value'; on right subtree must be larger
-                - elems is equal to {value} + left.elems + right.elems
-                - the size of elems must be 1 + |left.elems| + |right.elems|, to ensure there are no duplicates
-                - left.Repr and right.Repr must be disjoint sets (as well as left.elems and right.elems)
+            - Repr is valid: this node is in Repr, as well as the nodes of the subtree. this node is not in the subtree's Repr.
+            - left and right are always Valid
+            - all values in left subtree are smaller than 'value'; on right subtree must be larger
+            - elems is equal to {value} + left.elems + right.elems
+            - the size of elems must be 1 + |left.elems| + |right.elems|, to ensure there are no duplicates
+            - left.Repr and right.Repr must be disjoint sets (as well as left.elems and right.elems)
         */
         this in Repr &&
 
         (left != null ==>
-            left in Repr &&
-            left.Repr <= Repr && this !in left.Repr &&
-            left.Valid() &&
-            (forall v :: v in left.elems ==> v < value)) &&
+            left in Repr && left.Repr <= Repr && this !in left.Repr &&
+            left.Valid() && (forall v :: v in left.elems ==> v < value)) &&
 
         (right != null ==>
-            right in Repr &&
-            right.Repr <= Repr && this !in right.Repr &&
-            right.Valid() &&
-            (forall v :: v in right.elems ==> value < v)) &&
+            right in Repr && right.Repr <= Repr && this !in right.Repr &&
+            right.Valid() && (forall v :: v in right.elems ==> value < v)) &&
 
         (left == null && right == null ==>
             elems == {value} && 
@@ -86,8 +82,7 @@ class {:autocontracts} BSTNode {
         ) &&
 
         (left != null && right != null ==>
-            left.Repr !! right.Repr &&
-            left.elems !! right.elems &&
+            left.Repr !! right.Repr && left.elems !! right.elems && // disjoint
             elems == left.elems + {value} + right.elems &&
             |elems| == |left.elems| + 1 + |right.elems|
         )
@@ -95,8 +90,8 @@ class {:autocontracts} BSTNode {
 
     // check if a given value is in the subtree starting in this node (inclusive)
     function method contains(x: T) : bool 
-        ensures contains(x) <==> x in elems
         decreases Repr
+        ensures contains(x) <==> x in elems
     {
         if x == value then // found value 
             true
@@ -112,23 +107,23 @@ class {:autocontracts} BSTNode {
     // returns the new root of this subtree
     // https://www.geeksforgeeks.org/binary-search-tree-set-2-delete/
     method delete(x: T) returns (node: BSTNode?)
+        requires x in elems
         modifies Repr
-        ensures fresh(Repr - old(Repr))
+        decreases Repr
         ensures node != null ==> node.Valid()
         ensures node == null ==> old(elems) <= {x}
         ensures node != null ==> node.Repr <= Repr && node.elems == old(elems) - {x}
-        decreases Repr
+        ensures fresh(Repr - old(Repr))
     {
-        node := this; 
+        node := this; // return itself by default
+
         if left != null && x < value { // value to delete is in left tree
-            var t := left.delete(x);
-            left := t;
+            left := left.delete(x);
             elems := elems - {x};
             if left != null { Repr := Repr + left.Repr; }
 
         } else if right != null && value < x { // value to delete is in right tree
-            var t := right.delete(x);
-            right := t;
+            right := right.delete(x);
             elems := elems - {x};
             if right != null { Repr := Repr + right.Repr; }
 
@@ -167,8 +162,8 @@ class {:autocontracts} BSTNode {
         modifies Repr
         decreases Repr
         ensures fresh(Repr - old(Repr))
-        ensures node != null ==> node.Valid()
         ensures node == null ==> old(elems) == {min}
+        ensures node != null ==> node.Valid()
         ensures node != null ==> node.Repr <= Repr && node.elems == old(elems) - {min}
         ensures min in old(elems) && (forall x :: x in old(elems) ==> min <= x)
     {
@@ -176,10 +171,10 @@ class {:autocontracts} BSTNode {
             min := value;
             node := right;
         } else { // keep searching in left subtree
-            var t;
-            min, t := left.deleteMin();
-            left := t;
+            min, left := left.deleteMin(); // update 'min' return value and 'left' subtree
             node := this;
+
+            // update state
             elems := elems - {min};
             if left != null { Repr := Repr + left.Repr; }
         }
@@ -212,7 +207,7 @@ class {:autocontracts} TreeSet {
     predicate Valid()
     {
         this in Repr &&
-        (root == null ==> elems == {}) && // null root implies no elements, and vice versa
+        (root == null <==> elems == {}) && // null root implies no elements, and vice versa
         (root != null ==> elems == root.elems && // TreeSet elements must be the same as the root elements
                           root in Repr && // the root must be in Repr
                           root.Repr <= Repr && // root Repr must be a subset of the TreeSet Repr
@@ -231,10 +226,11 @@ class {:autocontracts} TreeSet {
 
     // insert a value on the TreeSet. If it is repeated it will have no effect.
     method insert(x: T) 
+        requires x !in elems
         modifies Repr
-        ensures fresh(Repr - old(Repr))
         ensures elems == old(elems) + {x}
         ensures x in old(elems) ==> elems == old(elems)
+        ensures fresh(Repr - old(Repr))
     {
         // attempt to insert new value and update root
         var newRoot := insertHelper(x, root);
@@ -250,6 +246,7 @@ class {:autocontracts} TreeSet {
     // if x already is in the BST nothing will be changed
     static method insertHelper(x: T, n: BSTNode?) returns (m: BSTNode)
         requires n == null || n.Valid()
+        requires n != null ==> x !in n.elems
         modifies if n != null then n.Repr else {}
         ensures m.Valid()
         ensures n == null ==> fresh(m.Repr) && m.elems == {x}
@@ -259,16 +256,15 @@ class {:autocontracts} TreeSet {
     {
         if n == null { // did not find x, create new node with that value
             m := new BSTNode(x);
-        } else if x == n.value { // repeated value, return existing node
+        } /*else if x == n.value { // repeated value, return existing node
             m := n;
-        } else {
+        }*/ 
+        else {
             if x < n.value { // insert x in left subtree and update 'n' values
-                var t := insertHelper(x, n.left);
-                n.left := t;
+                n.left := insertHelper(x, n.left);
                 n.Repr := n.Repr + n.left.Repr;
             } else { // insert x in right subtree and update 'n' values
-                var t := insertHelper(x, n.right);
-                n.right := t;
+                n.right := insertHelper(x, n.right);
                 n.Repr := n.Repr + n.right.Repr;
             }
             
@@ -279,19 +275,18 @@ class {:autocontracts} TreeSet {
 
     // delete a value x from the TreeSet if it exists
     method delete(x: T)
+        requires root != null && x in root.elems
         modifies Repr
-        ensures fresh(Repr - old(Repr))
         ensures elems == old(elems) - {x}
+        ensures fresh(Repr - old(Repr))
     {
-        if root != null {
-            // delete value from BST and update the TreeSet's root
-            var newRoot := root.delete(x); 
-            root := newRoot;
+        // delete value from BST and update the TreeSet's root
+        var newRoot := root.delete(x); 
+        root := newRoot;
 
-            // update state
-            elems := if root == null then {} else root.elems;
-            Repr := if root == null then {this} else root.Repr + {this};
-        }
+        // update state
+        elems := if root == null then {} else root.elems;
+        Repr := if root == null then {this} else root.Repr + {this};
     }
 
     // return the TreeSet values as a sequence, ordered and without duplicates
@@ -339,7 +334,6 @@ method testTreeSet() {
     s.insert(12);
     s.insert(24);
     s.insert(1);
-    s.insert(1);
 
     assert s.contains(1);
     assert s.contains(12);
@@ -360,10 +354,6 @@ method testTreeSet() {
 }
 
 /* TODO
-
-- check conditions and simplify code
-
 - small report explaining the algorithm, decisions, and references used : https://docs.google.com/document/d/1yd8cTPNcB16oTAvn4s7nZjUev9nl9400ekhUMZt_0tk/edit
-- create requires clauses
 - should it compile?
 */
