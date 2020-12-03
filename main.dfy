@@ -34,8 +34,9 @@ class {:autocontracts} BSTNode {
 
     // initialize node with given value and no children
     constructor(x: T) 
+        ensures value == x && left == null && right == null
         ensures elems == {x}
-        ensures fresh(Repr - {this})
+        ensures Repr == {this}
     {
         value := x;
         left := null;
@@ -108,12 +109,10 @@ class {:autocontracts} BSTNode {
     // https://www.geeksforgeeks.org/binary-search-tree-set-2-delete/
     method delete(x: T) returns (node: BSTNode?)
         requires x in elems
-        modifies Repr
         decreases Repr
-        ensures node != null ==> node.Valid()
         ensures node == null ==> old(elems) <= {x}
+        ensures node != null ==> node.Valid()
         ensures node != null ==> node.Repr <= Repr && node.elems == old(elems) - {x}
-        ensures fresh(Repr - old(Repr))
     {
         node := this; // return itself by default
 
@@ -159,7 +158,6 @@ class {:autocontracts} BSTNode {
     // deletes the min value of a BST node, returning its values
     // since this is a BST, it will be the leftmost node and it is represented by its value and right subtree
     method deleteMin() returns (min: T, node: BSTNode?)
-        modifies Repr
         decreases Repr
         ensures fresh(Repr - old(Repr))
         ensures node == null ==> old(elems) == {min}
@@ -194,8 +192,9 @@ class {:autocontracts} TreeSet {
 
     // initialize TreeSet with null root and 0 elements    
     constructor() 
+        ensures root == null
         ensures elems == {}
-        ensures fresh(Repr - {this})
+        ensures Repr == {this}
     {
         root := null;
         elems := {};
@@ -227,10 +226,7 @@ class {:autocontracts} TreeSet {
     // insert a value on the TreeSet. If it is repeated it will have no effect.
     method insert(x: T) 
         requires x !in elems
-        modifies Repr
         ensures elems == old(elems) + {x}
-        ensures x in old(elems) ==> elems == old(elems)
-        ensures fresh(Repr - old(Repr))
     {
         // attempt to insert new value and update root
         var newRoot := insertHelper(x, root);
@@ -256,9 +252,7 @@ class {:autocontracts} TreeSet {
     {
         if n == null { // did not find x, create new node with that value
             m := new BSTNode(x);
-        } /*else if x == n.value { // repeated value, return existing node
-            m := n;
-        }*/ 
+        } 
         else {
             if x < n.value { // insert x in left subtree and update 'n' values
                 n.left := insertHelper(x, n.left);
@@ -276,9 +270,7 @@ class {:autocontracts} TreeSet {
     // delete a value x from the TreeSet if it exists
     method delete(x: T)
         requires root != null && x in root.elems
-        modifies Repr
         ensures elems == old(elems) - {x}
-        ensures fresh(Repr - old(Repr))
     {
         // delete value from BST and update the TreeSet's root
         var newRoot := root.delete(x); 
@@ -353,7 +345,13 @@ method testTreeSet() {
     assert s2 == [1,12,24];
 }
 
-/* TODO
-- small report explaining the algorithm, decisions, and references used : https://docs.google.com/document/d/1yd8cTPNcB16oTAvn4s7nZjUev9nl9400ekhUMZt_0tk/edit
-- should it compile?
-*/
+/*method testInvalidDelete() {
+    var s := new TreeSet();
+    s.delete(1);
+}
+
+method testDuplicateInsert() {
+    var s := new TreeSet();
+    s.insert(1);
+    s.insert(1);
+}*/
